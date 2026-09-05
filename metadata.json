@@ -1,0 +1,7 @@
+{
+  "name": "Mr. Stark",
+  "description": "Futuristic personal AI voice assistant with voice pipeline, wake-word detection, device action engine, and memory system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

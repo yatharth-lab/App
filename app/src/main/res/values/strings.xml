@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Mr. Stark</string>
+    <string name="service_name">Mr. Stark Assistant Service</string>
+    <string name="service_desc">Mr. Stark active and monitoring voice input</string>
+    <string name="mic_perm_rationale">Microphone permission is required to speak with Mr. Stark</string>
+</resources>
