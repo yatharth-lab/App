@@ -30,13 +30,14 @@ fun QuickActionRow(
     modifier: Modifier = Modifier
 ) {
     val quickActions = listOf(
-        "YouTube kholo aur search karo Iron Man",
+        "yt kholo aur movie chalo random",
         "yt per search karo Jarvis assistant",
         "Generate image of futuristic iron man",
-        "Write a paragraph on quantum computing",
+        "Write a paragraph on Artificial Intelligence",
+        "yaha search karo",
         "Read screen",
         "Torch on karo",
-        "What's my battery telemetry?"
+        "Battery kitni hai?"
     )
 
     Row(

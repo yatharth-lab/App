@@ -120,53 +120,107 @@ class LocalRuleAIProvider : AIProvider {
             }
         }
 
-        // YouTube specific search or in-app search:
-        // "yt per search karo [query]", "youtube par [query] dhoondo", "yaha search karo [query]"
-        if (clean.contains("yt per ") || clean.contains("yt par ") || clean.contains("youtube per ") ||
-            clean.contains("youtube par ") || clean.contains("yt me ") || clean.contains("youtube me ")
-        ) {
-            val query = clean
-                .replace("yt per search karo", "")
-                .replace("yt par search karo", "")
-                .replace("youtube per search karo", "")
-                .replace("youtube par search karo", "")
-                .replace("yt search", "")
-                .replace("youtube search", "")
-                .replace("yt per", "")
-                .replace("yt par", "")
-                .replace("youtube per", "")
-                .replace("youtube par", "")
-                .replace("search karo", "")
-                .replace("search", "")
-                .replace("kuch", "")
-                .replace("dhoondo", "")
-                .trim()
-            if (query.isNotEmpty()) {
+        // 1. YouTube & Media Playback (Movies, Songs, Videos, Random Play)
+        // e.g. "movie chalo random", "random movie chalao", "koi movie chalao", "gaana chalao", "play movie", "yt per search karo"
+        val movieKeywords = listOf(
+            "movie chalo random", "random movie chalao", "random movie", "koi movie chalao",
+            "movie chalao", "movie chalo", "film chalao", "koi movie", "movie play karo",
+            "play movie", "play a movie"
+        )
+        for (kw in movieKeywords) {
+            if (clean.contains(kw)) {
+                val query = clean.replace(kw, "").replace("random", "").trim().ifEmpty { "popular full movies hindi" }
                 return AIResponse(
-                    spokenText = "Searching YouTube for $query, Sir.",
+                    spokenText = "Launching movie playback on YouTube for $query, Sir.",
                     actionCommand = ActionCommand(
                         type = ActionCommand.TYPE_SEARCH_IN_APP,
                         target = "youtube",
                         query = query,
-                        spokenResponse = "Searching YouTube for $query, Sir."
+                        spokenResponse = "Opening YouTube and playing $query, Sir."
                     )
                 )
             }
         }
 
-        // "yaha search karo [x]" / "is app me search karo [x]"
-        if (clean.startsWith("yaha search") || clean.startsWith("is app me search") ||
-            clean.startsWith("screen par search") || clean.startsWith("here search")
-        ) {
+        val musicKeywords = listOf(
+            "gaana chalao", "gaana bajao", "song chalao", "koi song chalao", "music chalao",
+            "song play karo", "play music", "play song", "play songs", "play gaana", "kuch chalao"
+        )
+        for (kw in musicKeywords) {
+            if (clean.contains(kw)) {
+                val query = clean.replace(kw, "").trim().ifEmpty { "trending bollywood songs" }
+                return AIResponse(
+                    spokenText = "Playing $query on YouTube, Sir.",
+                    actionCommand = ActionCommand(
+                        type = ActionCommand.TYPE_SEARCH_IN_APP,
+                        target = "youtube",
+                        query = query,
+                        spokenResponse = "Playing $query on YouTube, Sir."
+                    )
+                )
+            }
+        }
+
+        // YouTube specific search ("yt per search karo", "yt pe search karo", "yt par search karo", "youtube pe", etc.)
+        val ytTriggers = listOf(
+            "yt per ", "yt par ", "yt pe ", "yt me ",
+            "youtube per ", "youtube par ", "youtube pe ", "youtube me ",
+            "yt search ", "youtube search "
+        )
+        val matchesYt = ytTriggers.any { clean.contains(it) } || 
+                        clean.startsWith("yt search") || clean.startsWith("youtube search") ||
+                        clean.endsWith(" yt pe") || clean.endsWith(" youtube par") || clean.endsWith(" yt per")
+
+        if (matchesYt) {
             val query = clean
-                .replace("yaha search karo", "")
-                .replace("yaha search", "")
-                .replace("is app me search karo", "")
-                .replace("is app me search", "")
-                .replace("screen par search", "")
-                .replace("here search", "")
+                .replace("yt per search karo", "")
+                .replace("yt par search karo", "")
+                .replace("yt pe search karo", "")
+                .replace("yt me search karo", "")
+                .replace("youtube per search karo", "")
+                .replace("youtube par search karo", "")
+                .replace("youtube pe search karo", "")
+                .replace("youtube me search karo", "")
+                .replace("yt search karo", "")
+                .replace("youtube search karo", "")
+                .replace("yt search", "")
+                .replace("youtube search", "")
+                .replace("yt per", "")
+                .replace("yt par", "")
+                .replace("yt pe", "")
+                .replace("yt me", "")
+                .replace("youtube per", "")
+                .replace("youtube par", "")
+                .replace("youtube pe", "")
+                .replace("youtube me", "")
+                .replace("search karo", "")
+                .replace("search", "")
+                .replace("dhoondo", "")
+                .replace("kuch", "")
                 .trim()
-            if (query.isNotEmpty()) {
+                .ifEmpty { "trending" }
+
+            return AIResponse(
+                spokenText = "Searching YouTube for $query, Sir.",
+                actionCommand = ActionCommand(
+                    type = ActionCommand.TYPE_SEARCH_IN_APP,
+                    target = "youtube",
+                    query = query,
+                    spokenResponse = "Searching YouTube for $query, Sir."
+                )
+            )
+        }
+
+        // In-app search on current active screen ("yaha search karo", "is app me search karo", "screen par search karo")
+        val inAppTriggers = listOf(
+            "yaha search karo", "yahan search karo", "yaha pe search karo", "yaha par search karo",
+            "yaha per search karo", "yaha search", "yahan search", "is app me search karo",
+            "is app me search", "is app par search", "is app per search", "is screen par search",
+            "screen par search", "here search", "search here"
+        )
+        for (trigger in inAppTriggers) {
+            if (clean.contains(trigger)) {
+                val query = clean.replace(trigger, "").replace("kuch", "").trim().ifEmpty { "item" }
                 return AIResponse(
                     spokenText = "Executing search inside active application for $query, Sir.",
                     actionCommand = ActionCommand(

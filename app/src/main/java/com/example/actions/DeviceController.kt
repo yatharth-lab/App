@@ -80,33 +80,37 @@ class DeviceController(private val context: Context) {
      * Explicit search directly on YouTube app or YouTube mobile web
      */
     fun performYouTubeSearch(query: String): String {
-        return try {
-            val intent = Intent(Intent.ACTION_SEARCH).apply {
+        val cleanQuery = query.trim().ifEmpty { "trending movies hindi" }
+        val targetQuery = if (cleanQuery.equals("random", ignoreCase = true) || 
+                              cleanQuery.equals("movie", ignoreCase = true) || 
+                              cleanQuery.equals("random movie", ignoreCase = true)) {
+            "popular full movies hindi"
+        } else cleanQuery
+
+        val ytUrl = "https://www.youtube.com/results?search_query=${Uri.encode(targetQuery)}"
+
+        // 1. First attempt: Direct YouTube app launch
+        try {
+            val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse(ytUrl)).apply {
                 setPackage("com.google.android.youtube")
-                putExtra("query", query)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            if (intent.resolveActivity(context.packageManager) != null) {
-                context.startActivity(intent)
-                "Searching YouTube for \"$query\", Sir."
-            } else {
-                // Fallback to youtube search URL
-                val ytUrl = "https://www.youtube.com/results?search_query=${Uri.encode(query)}"
-                val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(ytUrl)).apply {
-                    setPackage("com.google.android.youtube")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                if (viewIntent.resolveActivity(context.packageManager) != null) {
-                    context.startActivity(viewIntent)
-                    "Opening YouTube search for \"$query\", Sir."
-                } else {
-                    openUrl(ytUrl)
-                    "Searching YouTube for \"$query\" in browser."
-                }
+            context.startActivity(appIntent)
+            return "Opening YouTube for \"$targetQuery\", Sir."
+        } catch (_: Exception) {
+            // YouTube app package not present or activity blocked
+        }
+
+        // 2. Second attempt: Broadcast generic VIEW intent (browser or YouTube client)
+        return try {
+            val genericIntent = Intent(Intent.ACTION_VIEW, Uri.parse(ytUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            context.startActivity(genericIntent)
+            "Searching YouTube for \"$targetQuery\", Sir."
         } catch (e: Exception) {
-            openUrl("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
-            "Searching YouTube for \"$query\"."
+            openUrl(ytUrl)
+            "Opening YouTube search for \"$targetQuery\" in browser, Sir."
         }
     }
 
