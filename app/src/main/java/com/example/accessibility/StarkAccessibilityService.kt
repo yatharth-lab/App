@@ -1,10 +1,11 @@
 package com.example.accessibility
 
 import android.accessibilityservice.AccessibilityService
-import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import java.lang.ref.WeakReference
 
 class StarkAccessibilityService : AccessibilityService() {
@@ -21,6 +22,27 @@ class StarkAccessibilityService : AccessibilityService() {
         }
 
         /**
+         * Resolves the primary active window root node, falling back to windows list if rootInActiveWindow is null.
+         */
+        private fun getBestRootNode(service: StarkAccessibilityService): AccessibilityNodeInfo? {
+            // 1. Try standard rootInActiveWindow
+            val activeRoot = service.rootInActiveWindow
+            if (activeRoot != null) return activeRoot
+
+            // 2. Try window list (API 21+)
+            val windows = service.windows
+            if (windows != null && windows.isNotEmpty()) {
+                // Find focused window or top application window
+                val appWindow = windows.firstOrNull { it.isFocused }
+                    ?: windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+                    ?: windows.firstOrNull()
+                val windowRoot = appWindow?.root
+                if (windowRoot != null) return windowRoot
+            }
+            return null
+        }
+
+        /**
          * Recursively extracts all visible text, content descriptions, and interactive labels from the active screen.
          */
         fun readScreenContent(): ScreenContentReport {
@@ -32,7 +54,7 @@ class StarkAccessibilityService : AccessibilityService() {
                 success = false
             )
 
-            val rootNode = service.rootInActiveWindow ?: return ScreenContentReport(
+            val rootNode = getBestRootNode(service) ?: return ScreenContentReport(
                 fullText = "Screen content is currently empty or protected by the active application.",
                 interactiveSummary = "",
                 packageName = service.currentPackage ?: "Unknown",
@@ -90,11 +112,11 @@ class StarkAccessibilityService : AccessibilityService() {
         }
 
         /**
-         * Finds an element matching the given text or description and performs a click.
+         * Finds an element matching the given text or description or view ID and performs a click.
          */
         fun clickElementWithText(target: String): Boolean {
             val service = getInstance() ?: return false
-            val rootNode = service.rootInActiveWindow ?: return false
+            val rootNode = getBestRootNode(service) ?: return false
             val lowerTarget = target.lowercase().trim()
 
             var clicked = false
@@ -104,9 +126,11 @@ class StarkAccessibilityService : AccessibilityService() {
 
                 val text = node.text?.toString()?.lowercase()?.trim()
                 val desc = node.contentDescription?.toString()?.lowercase()?.trim()
+                val viewId = node.viewIdResourceName?.lowercase()?.trim()
 
                 val matches = (text != null && text.contains(lowerTarget)) ||
-                        (desc != null && desc.contains(lowerTarget))
+                        (desc != null && desc.contains(lowerTarget)) ||
+                        (viewId != null && viewId.contains(lowerTarget))
 
                 if (matches) {
                     if (node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
@@ -140,7 +164,7 @@ class StarkAccessibilityService : AccessibilityService() {
          */
         fun writeTextToInput(textToSet: String): Boolean {
             val service = getInstance() ?: return false
-            val rootNode = service.rootInActiveWindow ?: return false
+            val rootNode = getBestRootNode(service) ?: return false
 
             val args = Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, textToSet)
@@ -160,6 +184,8 @@ class StarkAccessibilityService : AccessibilityService() {
                 if (node == null || typed) return false
 
                 if (node.isEditable) {
+                    // Try focusing first if not focused
+                    node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                     if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
                         typed = true
                         return true
@@ -174,6 +200,37 @@ class StarkAccessibilityService : AccessibilityService() {
 
             findEditable(rootNode)
             return typed
+        }
+
+        /**
+         * Performs in-screen search by clicking search bar icon, writing text, and pressing submit.
+         */
+        fun searchInActiveScreen(query: String): Boolean {
+            val service = getInstance() ?: return false
+            val rootNode = getBestRootNode(service) ?: return false
+
+            // 1. If an editable field is already visible, type query into it
+            val wrote = writeTextToInput(query)
+            if (wrote) return true
+
+            // 2. Click search icon or search button on screen
+            val searchClicked = clickElementWithText("search") ||
+                    clickElementWithText("dhoondo") ||
+                    clickElementWithText("find") ||
+                    clickElementWithText("khoj")
+
+            if (searchClicked) {
+                try { Thread.sleep(400) } catch (_: Exception) {}
+                val updatedRoot = getBestRootNode(service) ?: rootNode
+                val args = Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, query)
+                }
+                val focused = updatedRoot.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                if (focused != null && focused.isEditable) {
+                    return focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                }
+            }
+            return false
         }
 
         /**

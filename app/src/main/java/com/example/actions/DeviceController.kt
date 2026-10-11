@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.provider.AlarmClock
+import android.provider.MediaStore
 import android.provider.Settings
 import android.accessibilityservice.AccessibilityService
 import com.example.accessibility.StarkAccessibilityService
@@ -72,6 +73,40 @@ class DeviceController(private val context: Context) {
         } catch (e: Exception) {
             openUrl("https://www.google.com/search?q=${Uri.encode(query)}")
             "Searching online for \"$query\"."
+        }
+    }
+
+    /**
+     * Explicit search directly on YouTube app or YouTube mobile web
+     */
+    fun performYouTubeSearch(query: String): String {
+        return try {
+            val intent = Intent(Intent.ACTION_SEARCH).apply {
+                setPackage("com.google.android.youtube")
+                putExtra("query", query)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (intent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(intent)
+                "Searching YouTube for \"$query\", Sir."
+            } else {
+                // Fallback to youtube search URL
+                val ytUrl = "https://www.youtube.com/results?search_query=${Uri.encode(query)}"
+                val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(ytUrl)).apply {
+                    setPackage("com.google.android.youtube")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (viewIntent.resolveActivity(context.packageManager) != null) {
+                    context.startActivity(viewIntent)
+                    "Opening YouTube search for \"$query\", Sir."
+                } else {
+                    openUrl(ytUrl)
+                    "Searching YouTube for \"$query\" in browser."
+                }
+            }
+        } catch (e: Exception) {
+            openUrl("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
+            "Searching YouTube for \"$query\"."
         }
     }
 
@@ -176,6 +211,26 @@ class DeviceController(private val context: Context) {
         } else {
             "No active text input field found on screen to write text."
         }
+    }
+
+    /**
+     * Search directly inside current foreground app using accessibility automation
+     */
+    fun searchInsideCurrentApp(query: String): String {
+        val currentPkg = StarkAccessibilityService.getInstance()?.currentPackage ?: ""
+        if (currentPkg.contains("youtube")) {
+            return performYouTubeSearch(query)
+        }
+
+        if (StarkAccessibilityService.isServiceConnected()) {
+            val searched = StarkAccessibilityService.searchInActiveScreen(query)
+            if (searched) {
+                return "Searching for \"$query\" on screen, Sir."
+            }
+        }
+
+        // Fallback to general web search
+        return performWebSearch(query)
     }
 
     fun performGlobalScreenAction(actionType: String): String {

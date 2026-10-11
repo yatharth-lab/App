@@ -30,13 +30,13 @@ fun QuickActionRow(
     modifier: Modifier = Modifier
 ) {
     val quickActions = listOf(
-        "YouTube kholo",
-        "What's my battery?",
-        "Set timer for 5 minutes",
-        "Remember my locker is 42",
-        "Chrome open karo",
-        "What time is it?",
-        "Google search AI news"
+        "YouTube kholo aur search karo Iron Man",
+        "yt per search karo Jarvis assistant",
+        "Generate image of futuristic iron man",
+        "Write a paragraph on quantum computing",
+        "Read screen",
+        "Torch on karo",
+        "What's my battery telemetry?"
     )
 
     Row(
@@ -58,7 +58,7 @@ fun QuickActionRow(
             ) {
                 Text(
                     text = action,
-                    color = StarkCyanPrimary,
+                    color = StarkTextPrimary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )

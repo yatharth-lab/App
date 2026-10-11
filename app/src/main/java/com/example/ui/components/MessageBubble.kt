@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,10 +20,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -42,6 +48,7 @@ import com.example.ui.theme.StarkTealSecondary
 import com.example.ui.theme.StarkTextDim
 import com.example.ui.theme.StarkTextPrimary
 import com.example.ui.theme.StarkTextSecondary
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -57,6 +64,17 @@ fun MessageBubble(
     val clipboardManager = LocalClipboardManager.current
     val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
     val timeStr = timeFormat.format(Date(message.timestamp))
+
+    val imageBitmap = remember(message.imagePath) {
+        val path = message.imagePath
+        if (path != null && File(path).exists()) {
+            try {
+                BitmapFactory.decodeFile(path)?.asImageBitmap()
+            } catch (_: Exception) {
+                null
+            }
+        } else null
+    }
 
     Column(
         modifier = modifier
@@ -99,6 +117,25 @@ fun MessageBubble(
                 .padding(14.dp)
         ) {
             Column {
+                // If message has generated image, render image preview
+                if (imageBitmap != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(240.dp)
+                            .padding(bottom = 10.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, StarkCyanPrimary, RoundedCornerShape(10.dp))
+                    ) {
+                        Image(
+                            bitmap = imageBitmap,
+                            contentDescription = "Generated Neural Artwork",
+                            modifier = Modifier.fillMaxWidth(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+
                 Text(
                     text = message.text,
                     color = StarkTextPrimary,

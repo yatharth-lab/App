@@ -6,6 +6,7 @@ data class ConversationMessage(
     val text: String,
     val actionType: String? = null,
     val actionDetails: String? = null,
+    val imagePath: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
 

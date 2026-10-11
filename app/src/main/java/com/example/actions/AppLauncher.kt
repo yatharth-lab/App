@@ -32,7 +32,14 @@ class AppLauncher(private val context: Context) {
     }
 
     fun launchAppByName(name: String): AppLaunchResult {
-        val normalizedTarget = name.trim().lowercase()
+        val raw = name.trim().lowercase()
+        val normalizedTarget = when (raw) {
+            "yt", "u tube", "you tube" -> "youtube"
+            "insta", "ig" -> "instagram"
+            "fb" -> "facebook"
+            "whats app", "wp" -> "whatsapp"
+            else -> raw
+        }
         val installed = getInstalledApps()
 
         // 1. Exact match
@@ -74,7 +81,7 @@ class AppLauncher(private val context: Context) {
 
     private fun resolveCommonAlias(target: String): String? {
         return when {
-            target.contains("youtube") -> "com.google.android.youtube"
+            target.contains("youtube") || target == "yt" -> "com.google.android.youtube"
             target.contains("chrome") -> "com.android.chrome"
             target.contains("map") -> "maps"
             target.contains("calc") -> "calculator"
@@ -82,7 +89,8 @@ class AppLauncher(private val context: Context) {
             target.contains("clock") || target.contains("alarm") -> "deskclock"
             target.contains("setting") -> "settings"
             target.contains("message") || target.contains("sms") -> "messaging"
-            target.contains("whatsapp") -> "whatsapp"
+            target.contains("whatsapp") || target == "wp" -> "whatsapp"
+            target.contains("instagram") || target == "insta" -> "instagram"
             target.contains("spotify") -> "spotify"
             target.contains("gmail") || target.contains("mail") -> "gm"
             target.contains("browser") -> "chrome"

@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [MemoryEntity::class, ConversationEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class StarkDatabase : RoomDatabase() {

@@ -13,6 +13,7 @@ data class ConversationEntity(
     val text: String,
     val actionType: String? = null,
     val actionDetails: String? = null,
+    val imagePath: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 ) {
     fun toDomain(): ConversationMessage = ConversationMessage(
@@ -25,6 +26,7 @@ data class ConversationEntity(
         text = text,
         actionType = actionType,
         actionDetails = actionDetails,
+        imagePath = imagePath,
         timestamp = timestamp
     )
 
@@ -35,6 +37,7 @@ data class ConversationEntity(
             text = msg.text,
             actionType = msg.actionType,
             actionDetails = msg.actionDetails,
+            imagePath = msg.imagePath,
             timestamp = msg.timestamp
         )
     }

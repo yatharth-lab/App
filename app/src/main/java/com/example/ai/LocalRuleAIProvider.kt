@@ -36,8 +36,8 @@ class LocalRuleAIProvider : AIProvider {
             )
         }
 
-        // 2. Check for compound commands (" and ", " aur ", " then ", " phir ")
-        val compoundSplitters = listOf(" and then ", " and ", " aur ", " then ", " phir ")
+        // 2. Compound commands (" and ", " aur ", " then ", " phir ", " ke baad ")
+        val compoundSplitters = listOf(" and then ", " and ", " aur ", " then ", " phir ", " ke baad ")
         for (splitter in compoundSplitters) {
             if (clean.contains(splitter)) {
                 val parts = clean.split(splitter).map { it.trim() }.filter { it.isNotEmpty() }
@@ -67,6 +67,118 @@ class LocalRuleAIProvider : AIProvider {
     }
 
     private fun parseSingleIntent(clean: String): AIResponse {
+        // Image Generation / Creation (ChatGPT / DALL-E style)
+        val imageKeywords = listOf(
+            "generate image", "image generate", "photo generate", "picture banao",
+            "image banao", "draw ", "create image", "make an image", "image create karo",
+            "photo banao", "tasveer banao"
+        )
+        for (kw in imageKeywords) {
+            if (clean.contains(kw)) {
+                val prompt = clean
+                    .replace(kw, "")
+                    .replace("of ", "")
+                    .replace("ki ", "")
+                    .trim()
+                    .ifEmpty { "futuristic iron man stark neural core" }
+                return AIResponse(
+                    spokenText = "Generating neural image for \"$prompt\", Sir.",
+                    actionCommand = ActionCommand(
+                        type = ActionCommand.TYPE_GENERATE_IMAGE,
+                        target = prompt,
+                        query = prompt,
+                        spokenResponse = "Rendering image for $prompt, Sir."
+                    )
+                )
+            }
+        }
+
+        // Paragraph Writing / Essay / Content Generation (ChatGPT style with web grounding)
+        val writeKeywords = listOf(
+            "write a paragraph", "write paragraph", "write an essay", "paragraph likho",
+            "essay likho", "write article", "article likho", "paragraph on", "kuch likho"
+        )
+        for (kw in writeKeywords) {
+            if (clean.contains(kw)) {
+                val topic = clean
+                    .replace(kw, "")
+                    .replace("on ", "")
+                    .replace("about ", "")
+                    .replace("par ", "")
+                    .replace("per ", "")
+                    .trim()
+                    .ifEmpty { "artificial intelligence breakthroughs" }
+                return AIResponse(
+                    spokenText = "Composing a research-backed briefing on \"$topic\", Sir.",
+                    actionCommand = ActionCommand(
+                        type = ActionCommand.TYPE_WRITE_PARAGRAPH,
+                        target = topic,
+                        query = topic,
+                        spokenResponse = "Writing structured briefing with sources on $topic, Sir."
+                    )
+                )
+            }
+        }
+
+        // YouTube specific search or in-app search:
+        // "yt per search karo [query]", "youtube par [query] dhoondo", "yaha search karo [query]"
+        if (clean.contains("yt per ") || clean.contains("yt par ") || clean.contains("youtube per ") ||
+            clean.contains("youtube par ") || clean.contains("yt me ") || clean.contains("youtube me ")
+        ) {
+            val query = clean
+                .replace("yt per search karo", "")
+                .replace("yt par search karo", "")
+                .replace("youtube per search karo", "")
+                .replace("youtube par search karo", "")
+                .replace("yt search", "")
+                .replace("youtube search", "")
+                .replace("yt per", "")
+                .replace("yt par", "")
+                .replace("youtube per", "")
+                .replace("youtube par", "")
+                .replace("search karo", "")
+                .replace("search", "")
+                .replace("kuch", "")
+                .replace("dhoondo", "")
+                .trim()
+            if (query.isNotEmpty()) {
+                return AIResponse(
+                    spokenText = "Searching YouTube for $query, Sir.",
+                    actionCommand = ActionCommand(
+                        type = ActionCommand.TYPE_SEARCH_IN_APP,
+                        target = "youtube",
+                        query = query,
+                        spokenResponse = "Searching YouTube for $query, Sir."
+                    )
+                )
+            }
+        }
+
+        // "yaha search karo [x]" / "is app me search karo [x]"
+        if (clean.startsWith("yaha search") || clean.startsWith("is app me search") ||
+            clean.startsWith("screen par search") || clean.startsWith("here search")
+        ) {
+            val query = clean
+                .replace("yaha search karo", "")
+                .replace("yaha search", "")
+                .replace("is app me search karo", "")
+                .replace("is app me search", "")
+                .replace("screen par search", "")
+                .replace("here search", "")
+                .trim()
+            if (query.isNotEmpty()) {
+                return AIResponse(
+                    spokenText = "Executing search inside active application for $query, Sir.",
+                    actionCommand = ActionCommand(
+                        type = ActionCommand.TYPE_SEARCH_IN_APP,
+                        target = "current",
+                        query = query,
+                        spokenResponse = "Searching active screen for $query, Sir."
+                    )
+                )
+            }
+        }
+
         // Screen Reading (Hindi, English, Hinglish)
         if (clean.contains("read screen") || clean.contains("screen padho") ||
             clean.contains("screen par kya likha hai") || clean.contains("kya likha hai") ||
@@ -349,7 +461,7 @@ class LocalRuleAIProvider : AIProvider {
         // Greetings
         if (clean == "hello" || clean == "hi" || clean == "hey" || clean == "kaise ho" || clean == "who are you") {
             return AIResponse(
-                spokenText = "Hello Sir. All Stark protocols are fully operational. I am standing by to control your device or answer your queries.",
+                spokenText = "Hello Sir. All Stark protocols are fully operational. I am standing by to control your device, write paragraphs, generate images, or perform tasks.",
                 actionCommand = ActionCommand(
                     type = ActionCommand.TYPE_NORMAL_RESPONSE,
                     spokenResponse = "Hello Sir. All Stark protocols are fully operational."

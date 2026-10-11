@@ -1,9 +1,12 @@
 package com.example.actions
 
 import android.content.Context
+import com.example.ai.ContentGenerationManager
 import com.example.data.model.ActionCommand
 import com.example.memory.MemoryRepository
 import com.example.overlay.StarkOverlayService
+import com.example.security.SecurityManager
+import com.example.settings.StarkPreferences
 import kotlinx.coroutines.delay
 
 class ActionEngine(
@@ -12,6 +15,9 @@ class ActionEngine(
 ) {
     private val appLauncher = AppLauncher(context)
     private val deviceController = DeviceController(context)
+    private val preferences = StarkPreferences(context)
+    private val securityManager = SecurityManager(context, preferences)
+    private val contentGenManager = ContentGenerationManager(context, securityManager)
 
     suspend fun executeAction(command: ActionCommand): ActionResult {
         return when (command.type) {
@@ -45,6 +51,50 @@ class ActionEngine(
                     spokenText = spoken,
                     actionBadge = "TYPED TEXT",
                     success = true
+                )
+            }
+
+            // In-app search / YouTube dedicated search
+            ActionCommand.TYPE_SEARCH_IN_APP -> {
+                val target = command.target?.lowercase() ?: ""
+                val query = command.query ?: command.parameters["query"] ?: ""
+                if (target.contains("youtube") || target == "yt") {
+                    val spoken = deviceController.performYouTubeSearch(query)
+                    ActionResult(
+                        spokenText = spoken,
+                        actionBadge = "YOUTUBE: $query",
+                        success = true
+                    )
+                } else {
+                    val spoken = deviceController.searchInsideCurrentApp(query)
+                    ActionResult(
+                        spokenText = spoken,
+                        actionBadge = "APP SEARCH: $query",
+                        success = true
+                    )
+                }
+            }
+
+            // ChatGPT-like Image Generation
+            ActionCommand.TYPE_GENERATE_IMAGE -> {
+                val prompt = command.target ?: command.query ?: "futuristic stark core"
+                val result = contentGenManager.generateImage(prompt)
+                ActionResult(
+                    spokenText = result.caption,
+                    actionBadge = "IMAGE CREATED",
+                    success = result.success,
+                    mediaPath = result.filePath
+                )
+            }
+
+            // ChatGPT-like Paragraph / Essay writing with internet grounding
+            ActionCommand.TYPE_WRITE_PARAGRAPH -> {
+                val topic = command.target ?: command.query ?: "artificial intelligence"
+                val result = contentGenManager.generateParagraph(topic)
+                ActionResult(
+                    spokenText = result.content,
+                    actionBadge = "BRIEFING READY",
+                    success = result.success
                 )
             }
 
@@ -260,6 +310,7 @@ class ActionEngine(
         val spokenParts = mutableListOf<String>()
         val badges = mutableListOf<String>()
         var allSuccess = true
+        var lastMediaPath: String? = null
 
         for (cmd in commands) {
             val result = executeAction(cmd)
@@ -269,17 +320,21 @@ class ActionEngine(
             if (result.actionBadge != null) {
                 badges.add(result.actionBadge)
             }
+            if (result.mediaPath != null) {
+                lastMediaPath = result.mediaPath
+            }
             if (!result.success) {
                 allSuccess = false
             }
-            // Small pause between sequential actions
-            delay(600)
+            // Sequential delay so user sees app open then search executed
+            delay(1000)
         }
 
         return ActionResult(
             spokenText = spokenParts.joinToString(" Next: "),
             actionBadge = badges.joinToString(" • "),
-            success = allSuccess
+            success = allSuccess,
+            mediaPath = lastMediaPath
         )
     }
 }
@@ -287,5 +342,6 @@ class ActionEngine(
 data class ActionResult(
     val spokenText: String,
     val actionBadge: String? = null,
-    val success: Boolean = true
+    val success: Boolean = true,
+    val mediaPath: String? = null
 )

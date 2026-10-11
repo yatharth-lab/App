@@ -300,6 +300,7 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
 
             var actionBadge: String? = null
             var spokenOutput = aiResponse.spokenText
+            var generatedImagePath: String? = null
 
             aiResponse.actionCommand?.let { cmd ->
                 val result = actionEngine.executeAction(cmd)
@@ -307,6 +308,7 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
                 if (result.spokenText.isNotBlank()) {
                     spokenOutput = result.spokenText
                 }
+                generatedImagePath = result.mediaPath
             }
 
             val starkMsg = ConversationMessage(
@@ -314,6 +316,7 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
                 text = spokenOutput,
                 actionType = aiResponse.actionCommand?.type,
                 actionDetails = actionBadge,
+                imagePath = generatedImagePath,
                 timestamp = System.currentTimeMillis()
             )
             memoryRepository.saveConversationMessage(starkMsg)
