@@ -3,6 +3,8 @@ package com.example.actions
 import android.content.Context
 import com.example.data.model.ActionCommand
 import com.example.memory.MemoryRepository
+import com.example.overlay.StarkOverlayService
+import kotlinx.coroutines.delay
 
 class ActionEngine(
     private val context: Context,
@@ -13,6 +15,68 @@ class ActionEngine(
 
     suspend fun executeAction(command: ActionCommand): ActionResult {
         return when (command.type) {
+            ActionCommand.TYPE_COMPOUND -> {
+                executeCompoundActions(command.subCommands)
+            }
+
+            ActionCommand.TYPE_READ_SCREEN -> {
+                val spoken = deviceController.readCurrentScreen()
+                ActionResult(
+                    spokenText = spoken,
+                    actionBadge = "SCREEN SCAN",
+                    success = true
+                )
+            }
+
+            ActionCommand.TYPE_CLICK_ELEMENT -> {
+                val target = command.target ?: ""
+                val spoken = deviceController.clickOnScreen(target)
+                ActionResult(
+                    spokenText = spoken,
+                    actionBadge = "CLICK: $target",
+                    success = true
+                )
+            }
+
+            ActionCommand.TYPE_WRITE_TEXT -> {
+                val text = command.target ?: command.query ?: ""
+                val spoken = deviceController.writeTextToScreen(text)
+                ActionResult(
+                    spokenText = spoken,
+                    actionBadge = "TYPED TEXT",
+                    success = true
+                )
+            }
+
+            ActionCommand.TYPE_GLOBAL_ACTION -> {
+                val actionName = command.target ?: "back"
+                val spoken = deviceController.performGlobalScreenAction(actionName)
+                ActionResult(
+                    spokenText = spoken,
+                    actionBadge = "NAV: ${actionName.uppercase()}",
+                    success = true
+                )
+            }
+
+            ActionCommand.TYPE_FLASHLIGHT -> {
+                val turnOn = command.target?.lowercase() != "off" && command.target?.lowercase() != "false"
+                val spoken = deviceController.toggleFlashlight(turnOn)
+                ActionResult(
+                    spokenText = spoken,
+                    actionBadge = if (turnOn) "TORCH ON" else "TORCH OFF",
+                    success = true
+                )
+            }
+
+            ActionCommand.TYPE_SHOW_OVERLAY -> {
+                StarkOverlayService.show(context)
+                ActionResult(
+                    spokenText = "Holographic Neural HUD deployed, Sir.",
+                    actionBadge = "HUD OVERLAY",
+                    success = true
+                )
+            }
+
             ActionCommand.TYPE_OPEN_APP -> {
                 val appName = command.target ?: return ActionResult(
                     spokenText = "Which application would you like me to open, Sir?",
@@ -186,6 +250,37 @@ class ActionEngine(
                 )
             }
         }
+    }
+
+    private suspend fun executeCompoundActions(commands: List<ActionCommand>): ActionResult {
+        if (commands.isEmpty()) {
+            return ActionResult(spokenText = "No sub-actions to execute, Sir.", success = false)
+        }
+
+        val spokenParts = mutableListOf<String>()
+        val badges = mutableListOf<String>()
+        var allSuccess = true
+
+        for (cmd in commands) {
+            val result = executeAction(cmd)
+            if (result.spokenText.isNotBlank()) {
+                spokenParts.add(result.spokenText)
+            }
+            if (result.actionBadge != null) {
+                badges.add(result.actionBadge)
+            }
+            if (!result.success) {
+                allSuccess = false
+            }
+            // Small pause between sequential actions
+            delay(600)
+        }
+
+        return ActionResult(
+            spokenText = spokenParts.joinToString(" Next: "),
+            actionBadge = badges.joinToString(" • "),
+            success = allSuccess
+        )
     }
 }
 

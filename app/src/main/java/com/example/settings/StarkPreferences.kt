@@ -43,12 +43,20 @@ class StarkPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_WAKE_WORD_ENABLED, value).apply()
 
     var handsFreeAutoListen: Boolean
-        get() = prefs.getBoolean(KEY_HANDS_FREE, false)
+        get() = prefs.getBoolean(KEY_HANDS_FREE, true)
         set(value) = prefs.edit().putBoolean(KEY_HANDS_FREE, value).apply()
 
     var foregroundServiceEnabled: Boolean
         get() = prefs.getBoolean(KEY_FG_SERVICE, false)
         set(value) = prefs.edit().putBoolean(KEY_FG_SERVICE, value).apply()
+
+    var overlayHudEnabled: Boolean
+        get() = prefs.getBoolean(KEY_OVERLAY_HUD_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_OVERLAY_HUD_ENABLED, value).apply()
+
+    var overlayCapacity: Float
+        get() = prefs.getFloat(KEY_OVERLAY_CAPACITY, 0.50f)
+        set(value) = prefs.edit().putFloat(KEY_OVERLAY_CAPACITY, value).apply()
 
     var darkModeEnabled: Boolean
         get() = prefs.getBoolean(KEY_DARK_MODE, true)
@@ -82,6 +90,8 @@ class StarkPreferences(context: Context) {
         private const val KEY_WAKE_WORD_ENABLED = "key_wake_word_enabled"
         private const val KEY_HANDS_FREE = "key_hands_free"
         private const val KEY_FG_SERVICE = "key_fg_service"
+        private const val KEY_OVERLAY_HUD_ENABLED = "key_overlay_hud_enabled"
+        private const val KEY_OVERLAY_CAPACITY = "key_overlay_capacity"
         private const val KEY_DARK_MODE = "key_dark_mode"
         private const val KEY_ANIMATION_INTENSITY = "key_animation_intensity"
         private const val KEY_APP_LOCK_PIN = "key_app_lock_pin"

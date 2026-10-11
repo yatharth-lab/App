@@ -1,9 +1,6 @@
 package com.example.security
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
-import androidx.core.content.ContextCompat
 import com.example.BuildConfig
 import com.example.settings.StarkPreferences
 
@@ -11,23 +8,25 @@ class SecurityManager(
     private val context: Context,
     private val preferences: StarkPreferences
 ) {
-    fun hasRecordAudioPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-    }
+    fun hasRecordAudioPermission(): Boolean = PermissionManager.hasAudioPermission(context)
 
-    fun hasPostNotificationsPermission(): Boolean {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-    }
+    fun hasAccessibilityPermission(): Boolean = PermissionManager.hasAccessibilityPermission(context)
+
+    fun hasOverlayPermission(): Boolean = PermissionManager.hasOverlayPermission(context)
+
+    fun isBatteryOptimizationIgnored(): Boolean = PermissionManager.isBatteryOptimizationIgnored(context)
+
+    fun hasPostNotificationsPermission(): Boolean = PermissionManager.hasNotificationPermission(context)
+
+    fun openAccessibilitySettings() = PermissionManager.openAccessibilitySettings(context)
+
+    fun openOverlaySettings() = PermissionManager.openOverlaySettings(context)
+
+    fun requestIgnoreBatteryOptimizations() = PermissionManager.requestIgnoreBatteryOptimizations(context)
+
+    fun openNotificationSettings() = PermissionManager.openNotificationSettings(context)
+
+    fun openAppDetailsSettings() = PermissionManager.openAppDetailsSettings(context)
 
     /**
      * Resolves the active Gemini API Key securely.

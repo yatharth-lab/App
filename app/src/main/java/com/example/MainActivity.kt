@@ -1,6 +1,7 @@
 package com.example
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -12,10 +13,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -29,16 +34,51 @@ import com.example.ui.theme.StarkDarkBackground
 import com.example.viewmodel.StarkViewModel
 
 class MainActivity : ComponentActivity() {
+
+    private var incomingCommand: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        incomingCommand = intent?.getStringExtra("INCOMING_VOICE_COMMAND")
+
         setContent {
             val starkViewModel: StarkViewModel = viewModel()
             val darkMode = starkViewModel.preferences.darkModeEnabled
 
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        starkViewModel.refreshPermissionStatus()
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
+
+            LaunchedEffect(incomingCommand) {
+                incomingCommand?.let { cmd ->
+                    if (cmd.isNotBlank()) {
+                        starkViewModel.submitUserMessage(cmd)
+                        incomingCommand = null
+                    }
+                }
+            }
+
             MyApplicationTheme(darkTheme = darkMode) {
                 StarkAppRoot(viewModel = starkViewModel)
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra("INCOMING_VOICE_COMMAND")?.let { cmd ->
+            incomingCommand = cmd
         }
     }
 }
@@ -48,13 +88,13 @@ fun StarkAppRoot(viewModel: StarkViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val navController = rememberNavController()
 
-    // Runtime permissions launcher
     val permissionsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
+        viewModel.refreshPermissionStatus()
         val recordGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
         if (recordGranted && viewModel.preferences.wakeWordEnabled) {
-            // Permission granted, ready for voice interaction
+            viewModel.startListening()
         }
     }
 
@@ -112,4 +152,3 @@ fun StarkAppRoot(viewModel: StarkViewModel) {
         }
     }
 }
-

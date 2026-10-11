@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.camera2.CameraManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -13,6 +14,8 @@ import android.os.BatteryManager
 import android.os.Build
 import android.provider.AlarmClock
 import android.provider.Settings
+import android.accessibilityservice.AccessibilityService
+import com.example.accessibility.StarkAccessibilityService
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -67,7 +70,6 @@ class DeviceController(private val context: Context) {
             context.startActivity(intent)
             "Searching the web for \"$query\", Sir."
         } catch (e: Exception) {
-            // Fallback to browser search URL
             openUrl("https://www.google.com/search?q=${Uri.encode(query)}")
             "Searching online for \"$query\"."
         }
@@ -89,7 +91,6 @@ class DeviceController(private val context: Context) {
     }
 
     fun getDeviceInfo(): String {
-        // Battery info
         val batteryStatus: Intent? = IntentFilter(Intent.ACTION_BATTERY_CHANGED).let { filter ->
             context.registerReceiver(null, filter)
         }
@@ -100,7 +101,6 @@ class DeviceController(private val context: Context) {
         val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                 status == BatteryManager.BATTERY_STATUS_FULL
 
-        // Connectivity
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val activeNetwork = cm.activeNetwork
         val caps = cm.getNetworkCapabilities(activeNetwork)
@@ -118,6 +118,87 @@ class DeviceController(private val context: Context) {
         return "Telemetry Report, Sir: Battery is at $batteryPct%$chargingText. Network connection: $networkType. Time: $timeStr. Running on $deviceModel with $osVersion."
     }
 
+    fun toggleFlashlight(turnOn: Boolean): String {
+        return try {
+            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+            val cameraId = cameraManager?.cameraIdList?.firstOrNull()
+            if (cameraManager != null && cameraId != null) {
+                cameraManager.setTorchMode(cameraId, turnOn)
+                if (turnOn) "Flashlight activated, Sir." else "Flashlight turned off, Sir."
+            } else {
+                "Sir, no camera flash hardware was detected."
+            }
+        } catch (e: Exception) {
+            "Unable to toggle flashlight: ${e.localizedMessage}"
+        }
+    }
+
+    fun readCurrentScreen(): String {
+        if (!StarkAccessibilityService.isServiceConnected()) {
+            return "Sir, accessibility permissions are required to scan screen content. Please enable Mr. Stark in Settings."
+        }
+        val report = StarkAccessibilityService.readScreenContent()
+        if (!report.success) {
+            return report.fullText
+        }
+        val cleanSummary = report.fullText
+            .lines()
+            .filter { it.isNotBlank() }
+            .take(6)
+            .joinToString(". ")
+
+        val interactive = if (report.interactiveSummary.isNotBlank()) {
+            " Available interactive controls: ${report.interactiveSummary}."
+        } else ""
+
+        return "Screen scan complete for ${report.packageName}. Content reads: $cleanSummary.$interactive"
+    }
+
+    fun clickOnScreen(targetText: String): String {
+        if (!StarkAccessibilityService.isServiceConnected()) {
+            return "Accessibility permission required to interact with screen buttons."
+        }
+        val clicked = StarkAccessibilityService.clickElementWithText(targetText)
+        return if (clicked) {
+            "Tapped on \"$targetText\", Sir."
+        } else {
+            "Could not locate a clickable element matching \"$targetText\" on current screen."
+        }
+    }
+
+    fun writeTextToScreen(textToType: String): String {
+        if (!StarkAccessibilityService.isServiceConnected()) {
+            return "Accessibility permission required to write text."
+        }
+        val typed = StarkAccessibilityService.writeTextToInput(textToType)
+        return if (typed) {
+            "Entered text: \"$textToType\", Sir."
+        } else {
+            "No active text input field found on screen to write text."
+        }
+    }
+
+    fun performGlobalScreenAction(actionType: String): String {
+        if (!StarkAccessibilityService.isServiceConnected()) {
+            return "Accessibility permission required for system global controls."
+        }
+        val actionId = when (actionType.lowercase()) {
+            "back" -> AccessibilityService.GLOBAL_ACTION_BACK
+            "home" -> AccessibilityService.GLOBAL_ACTION_HOME
+            "recents", "recent_apps" -> AccessibilityService.GLOBAL_ACTION_RECENTS
+            "notifications" -> AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS
+            "quick_settings" -> AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS
+            "lock" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN else AccessibilityService.GLOBAL_ACTION_BACK
+            else -> AccessibilityService.GLOBAL_ACTION_BACK
+        }
+        val success = StarkAccessibilityService.performGlobal(actionId)
+        return if (success) {
+            "Action $actionType executed successfully, Sir."
+        } else {
+            "Failed to execute global action $actionType."
+        }
+    }
+
     fun openSettings(target: String? = null): String {
         return try {
             val intent = when (target?.lowercase()) {
@@ -125,6 +206,7 @@ class DeviceController(private val context: Context) {
                 "bluetooth" -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
                 "sound", "volume" -> Intent(Settings.ACTION_SOUND_SETTINGS)
                 "display", "screen" -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
+                "accessibility" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                 else -> Intent(Settings.ACTION_SETTINGS)
             }.apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

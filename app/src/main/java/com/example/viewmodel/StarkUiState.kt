@@ -17,5 +17,12 @@ data class StarkUiState(
     val errorMessage: String? = null,
     val isAppUnlocked: Boolean = true,
     val wakeWordEnabled: Boolean = true,
-    val handsFreeEnabled: Boolean = false
+    val handsFreeEnabled: Boolean = true,
+    val overlayHudEnabled: Boolean = true,
+    // Permissions Status
+    val hasAudioPermission: Boolean = false,
+    val hasAccessibilityPermission: Boolean = false,
+    val hasOverlayPermission: Boolean = false,
+    val isBatteryOptimized: Boolean = true,
+    val hasNotificationPermission: Boolean = false
 )

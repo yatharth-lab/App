@@ -3,4 +3,7 @@
     <string name="service_name">Mr. Stark Assistant Service</string>
     <string name="service_desc">Mr. Stark active and monitoring voice input</string>
     <string name="mic_perm_rationale">Microphone permission is required to speak with Mr. Stark</string>
+    <string name="accessibility_service_description">Enables Mr. Stark to read screen contents, tap buttons, write text, and execute voice actions across all your apps.</string>
+    <string name="accessibility_service_label">Mr. Stark Assistant Protocol</string>
+    <string name="overlay_hud_label">Mr. Stark Holographic HUD</string>
 </resources>

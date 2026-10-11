@@ -6,6 +6,7 @@ data class ActionCommand(
     val query: String? = null,
     val parameters: Map<String, String> = emptyMap(),
     val spokenResponse: String = "",
+    val subCommands: List<ActionCommand> = emptyList(),
     val requiresConfirmation: Boolean = false
 ) {
     companion object {
@@ -24,5 +25,14 @@ data class ActionCommand(
         const val TYPE_SEND_MESSAGE = "SEND_MESSAGE"
         const val TYPE_COPY_CLIPBOARD = "COPY_CLIPBOARD"
         const val TYPE_SHARE_TEXT = "SHARE_TEXT"
+
+        // New Advanced Jarvis Accessibility & System Actions
+        const val TYPE_READ_SCREEN = "READ_SCREEN"
+        const val TYPE_CLICK_ELEMENT = "CLICK_ELEMENT"
+        const val TYPE_WRITE_TEXT = "WRITE_TEXT"
+        const val TYPE_GLOBAL_ACTION = "GLOBAL_ACTION"
+        const val TYPE_FLASHLIGHT = "FLASHLIGHT"
+        const val TYPE_SHOW_OVERLAY = "SHOW_OVERLAY"
+        const val TYPE_COMPOUND = "COMPOUND"
     }
 }

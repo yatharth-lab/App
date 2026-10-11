@@ -5,11 +5,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.actions.ActionEngine
 import com.example.ai.AIManager
+import com.example.data.model.ActionCommand
 import com.example.data.model.AssistantState
 import com.example.data.model.ConversationMessage
 import com.example.data.model.MessageSender
 import com.example.memory.MemoryRepository
 import com.example.memory.StarkDatabase
+import com.example.overlay.StarkOverlayService
+import com.example.security.PermissionManager
 import com.example.security.SecurityManager
 import com.example.service.StarkForegroundService
 import com.example.settings.StarkPreferences
@@ -39,7 +42,7 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
         StarkUiState(
             isOnline = aiManager.isOnline(),
             activeProviderName = if (preferences.aiProvider == StarkPreferences.PROVIDER_OFFLINE_RULES) {
-                "Local Rule Engine"
+                "Local Rule Engine (Offline)"
             } else {
                 "Google Gemini (${preferences.aiModel})"
             },
@@ -47,7 +50,13 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
             isAppUnlocked = !preferences.isAppLocked,
             wakeWordEnabled = preferences.wakeWordEnabled,
             handsFreeEnabled = preferences.handsFreeAutoListen,
-            isBackgroundActive = StarkForegroundService.isRunning.value
+            overlayHudEnabled = preferences.overlayHudEnabled,
+            isBackgroundActive = StarkForegroundService.isRunning.value,
+            hasAudioPermission = PermissionManager.hasAudioPermission(application),
+            hasAccessibilityPermission = PermissionManager.hasAccessibilityPermission(application),
+            hasOverlayPermission = PermissionManager.hasOverlayPermission(application),
+            isBatteryOptimized = !PermissionManager.isBatteryOptimizationIgnored(application),
+            hasNotificationPermission = PermissionManager.hasNotificationPermission(application)
         )
     )
     val uiState: StateFlow<StarkUiState> = _uiState.asStateFlow()
@@ -56,10 +65,24 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
         setupVoiceEngines()
         observeData()
         postInitialGreeting()
+        refreshPermissionStatus()
+    }
+
+    fun refreshPermissionStatus() {
+        val app = getApplication<Application>()
+        _uiState.update {
+            it.copy(
+                hasAudioPermission = PermissionManager.hasAudioPermission(app),
+                hasAccessibilityPermission = PermissionManager.hasAccessibilityPermission(app),
+                hasOverlayPermission = PermissionManager.hasOverlayPermission(app),
+                isBatteryOptimized = !PermissionManager.isBatteryOptimizationIgnored(app),
+                hasNotificationPermission = PermissionManager.hasNotificationPermission(app),
+                isBackgroundActive = StarkForegroundService.isRunning.value
+            )
+        }
     }
 
     private fun setupVoiceEngines() {
-        // Speech To Text Callbacks
         sttEngine.setListener(object : SpeechToTextEngine.Listener {
             override fun onListeningStarted() {
                 _uiState.update {
@@ -71,13 +94,20 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             override fun onRmsChanged(rmsdB: Float) {
-                // rmsdB usually ranges from -2 to ~10
                 val normalized = (rmsdB + 2f).coerceAtLeast(0f)
                 _uiState.update { it.copy(audioLevel = normalized) }
             }
 
             override fun onPartialResult(partialText: String) {
                 _uiState.update { it.copy(partialTranscript = partialText) }
+                // Also check partial transcript for wake word
+                if (preferences.wakeWordEnabled) {
+                    val detection = wakeWordDetector.processTranscript(partialText)
+                    if (detection.isWakeWordDetected && detection.extractedCommand.isNotBlank()) {
+                        sttEngine.stopListening()
+                        handleUserSpokenInput(detection.extractedCommand)
+                    }
+                }
             }
 
             override fun onResult(finalText: String) {
@@ -116,7 +146,6 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
             }
         })
 
-        // Text To Speech Callbacks
         ttsEngine.setListener(object : TextToSpeechEngine.Listener {
             override fun onSpeechStarted() {
                 _uiState.update { it.copy(assistantState = AssistantState.SPEAKING) }
@@ -128,7 +157,6 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
                         assistantState = if (it.isBackgroundActive) AssistantState.BACKGROUND_ACTIVE else AssistantState.IDLE
                     )
                 }
-                // If hands-free continuous mode is enabled, restart listening
                 if (preferences.handsFreeAutoListen) {
                     startListening()
                 }
@@ -144,7 +172,6 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
             }
         })
 
-        // Apply TTS user settings
         ttsEngine.updateConfig(
             languageCode = preferences.voiceLanguage,
             speed = preferences.speechSpeed,
@@ -186,7 +213,7 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
             if (count == 0) {
                 val greeting = ConversationMessage(
                     sender = MessageSender.STARK,
-                    text = "Mr. Stark online, Sir. Speech recognition and AI neural systems are standing by. How may I assist you today?",
+                    text = "Mr. Stark online, Sir. Full device control, screen inspection, and neural voice systems are primed. Say 'Mr. Stark' or tap to command.",
                     timestamp = System.currentTimeMillis()
                 )
                 memoryRepository.saveConversationMessage(greeting)
@@ -196,7 +223,11 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startListening() {
         ttsEngine.stop()
-        sttEngine.startListening(preferences.voiceLanguage)
+        refreshPermissionStatus()
+        sttEngine.startListening(
+            languageCode = preferences.voiceLanguage,
+            continuous = preferences.handsFreeAutoListen
+        )
     }
 
     fun stopListening() {
@@ -231,7 +262,6 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
         val trimmed = spokenText.trim()
         if (trimmed.isEmpty()) return
 
-        // Check wake word if wake word filtering is active
         var effectiveCommand = trimmed
         if (preferences.wakeWordEnabled) {
             val detection = wakeWordDetector.processTranscript(trimmed)
@@ -248,7 +278,6 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
         if (clean.isEmpty()) return
 
         viewModelScope.launch {
-            // Save User message
             val userMsg = ConversationMessage(
                 sender = MessageSender.USER,
                 text = clean,
@@ -264,7 +293,6 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
-            // Process query through AI Manager
             val memories = memoryRepository.getAllMemoriesList()
             val history = memoryRepository.getRecentConversations(8)
 
@@ -273,7 +301,6 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
             var actionBadge: String? = null
             var spokenOutput = aiResponse.spokenText
 
-            // If an action command was returned, execute it!
             aiResponse.actionCommand?.let { cmd ->
                 val result = actionEngine.executeAction(cmd)
                 actionBadge = result.actionBadge
@@ -282,7 +309,6 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            // Save Stark's response to database
             val starkMsg = ConversationMessage(
                 sender = MessageSender.STARK,
                 text = spokenOutput,
@@ -292,9 +318,21 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
             )
             memoryRepository.saveConversationMessage(starkMsg)
 
-            // Speak response via TTS
             ttsEngine.speak(spokenOutput)
         }
+    }
+
+    fun openOverlayHud() {
+        val app = getApplication<Application>()
+        if (PermissionManager.hasOverlayPermission(app)) {
+            StarkOverlayService.show(app)
+        } else {
+            securityManager.openOverlaySettings()
+        }
+    }
+
+    fun readActiveScreen() {
+        submitUserMessage("read screen")
     }
 
     fun toggleBackgroundService() {
@@ -306,6 +344,7 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
             StarkForegroundService.start(context)
             preferences.foregroundServiceEnabled = true
         }
+        refreshPermissionStatus()
     }
 
     fun saveMemory(key: String, value: String, category: String = "general") {
@@ -359,7 +398,7 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update {
             it.copy(
                 activeProviderName = if (provider == StarkPreferences.PROVIDER_OFFLINE_RULES) {
-                    "Local Rule Engine"
+                    "Local Rule Engine (Offline)"
                 } else {
                     "Google Gemini (${preferences.aiModel})"
                 }
@@ -384,13 +423,15 @@ class StarkViewModel(application: Application) : AndroidViewModel(application) {
         ttsEngine.updateConfig(language, speed, pitch, volume)
     }
 
-    fun updateWakeWordSettings(enabled: Boolean, handsFree: Boolean) {
+    fun updateWakeWordSettings(enabled: Boolean, handsFree: Boolean, overlayEnabled: Boolean) {
         preferences.wakeWordEnabled = enabled
         preferences.handsFreeAutoListen = handsFree
+        preferences.overlayHudEnabled = overlayEnabled
         _uiState.update {
             it.copy(
                 wakeWordEnabled = enabled,
-                handsFreeEnabled = handsFree
+                handsFreeEnabled = handsFree,
+                overlayHudEnabled = overlayEnabled
             )
         }
     }

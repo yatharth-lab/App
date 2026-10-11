@@ -17,7 +17,7 @@ class LocalRuleAIProvider : AIProvider {
         val trimmed = userMessage.trim()
         val lower = trimmed.lowercase(Locale.getDefault())
 
-        // 1. Remove activation phrase if present in message
+        // 1. Remove activation phrases if present
         val clean = lower
             .replace("mr stark", "")
             .replace("mr. stark", "")
@@ -26,7 +26,200 @@ class LocalRuleAIProvider : AIProvider {
             .replace("stark", "")
             .trim()
 
-        // 2. Battery / Telemetry / Device Info
+        if (clean.isEmpty()) {
+            return AIResponse(
+                spokenText = "Yes Sir, I am online and listening. How may I assist you?",
+                actionCommand = ActionCommand(
+                    type = ActionCommand.TYPE_NORMAL_RESPONSE,
+                    spokenResponse = "Yes Sir, I am online and listening."
+                )
+            )
+        }
+
+        // 2. Check for compound commands (" and ", " aur ", " then ", " phir ")
+        val compoundSplitters = listOf(" and then ", " and ", " aur ", " then ", " phir ")
+        for (splitter in compoundSplitters) {
+            if (clean.contains(splitter)) {
+                val parts = clean.split(splitter).map { it.trim() }.filter { it.isNotEmpty() }
+                if (parts.size > 1) {
+                    val subCommands = mutableListOf<ActionCommand>()
+                    for (part in parts) {
+                        val subResponse = parseSingleIntent(part)
+                        if (subResponse.actionCommand != null) {
+                            subCommands.add(subResponse.actionCommand)
+                        }
+                    }
+                    if (subCommands.isNotEmpty()) {
+                        return AIResponse(
+                            spokenText = "Executing multi-step protocol, Sir.",
+                            actionCommand = ActionCommand(
+                                type = ActionCommand.TYPE_COMPOUND,
+                                subCommands = subCommands,
+                                spokenResponse = "Executing multi-step protocol, Sir."
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        return parseSingleIntent(clean)
+    }
+
+    private fun parseSingleIntent(clean: String): AIResponse {
+        // Screen Reading (Hindi, English, Hinglish)
+        if (clean.contains("read screen") || clean.contains("screen padho") ||
+            clean.contains("screen par kya likha hai") || clean.contains("kya likha hai") ||
+            clean.contains("screen read karo") || clean.contains("read display") ||
+            clean.contains("screen scan") || clean.contains("kya chal raha hai")
+        ) {
+            return AIResponse(
+                spokenText = "Scanning active screen content, Sir.",
+                actionCommand = ActionCommand(
+                    type = ActionCommand.TYPE_READ_SCREEN,
+                    spokenResponse = "Scanning active screen content, Sir."
+                )
+            )
+        }
+
+        // Show Holographic HUD Overlay
+        if (clean.contains("open hud") || clean.contains("show overlay") ||
+            clean.contains("blue screen kholo") || clean.contains("hud chalao") ||
+            clean.contains("overlay screen") || clean.contains("show hud")
+        ) {
+            return AIResponse(
+                spokenText = "Deploying holographic 50% capacity neural overlay, Sir.",
+                actionCommand = ActionCommand(
+                    type = ActionCommand.TYPE_SHOW_OVERLAY,
+                    spokenResponse = "Deploying holographic overlay, Sir."
+                )
+            )
+        }
+
+        // Flashlight / Torch
+        if (clean.contains("torch on") || clean.contains("flashlight on") ||
+            clean.contains("torch jalao") || clean.contains("light on karo") ||
+            clean.contains("flash on")
+        ) {
+            return AIResponse(
+                spokenText = "Activating torch, Sir.",
+                actionCommand = ActionCommand(
+                    type = ActionCommand.TYPE_FLASHLIGHT,
+                    target = "on",
+                    spokenResponse = "Activating torch, Sir."
+                )
+            )
+        }
+        if (clean.contains("torch off") || clean.contains("flashlight off") ||
+            clean.contains("torch band karo") || clean.contains("light band karo") ||
+            clean.contains("flash off")
+        ) {
+            return AIResponse(
+                spokenText = "Deactivating torch, Sir.",
+                actionCommand = ActionCommand(
+                    type = ActionCommand.TYPE_FLASHLIGHT,
+                    target = "off",
+                    spokenResponse = "Deactivating torch, Sir."
+                )
+            )
+        }
+
+        // Screen Clicking ("click [button]", "tap [text]", "[button] par click karo")
+        val clickPrefixes = listOf("click on ", "click ", "tap on ", "tap ", "press ")
+        for (prefix in clickPrefixes) {
+            if (clean.startsWith(prefix)) {
+                val target = clean.removePrefix(prefix).trim()
+                if (target.isNotEmpty()) {
+                    return AIResponse(
+                        spokenText = "Tapping $target on screen, Sir.",
+                        actionCommand = ActionCommand(
+                            type = ActionCommand.TYPE_CLICK_ELEMENT,
+                            target = target,
+                            spokenResponse = "Tapping $target on screen, Sir."
+                        )
+                    )
+                }
+            }
+        }
+        if (clean.endsWith(" par click karo") || clean.endsWith(" pe click karo") || clean.endsWith(" dabaao")) {
+            val target = clean
+                .removeSuffix(" par click karo")
+                .removeSuffix(" pe click karo")
+                .removeSuffix(" dabaao")
+                .trim()
+            if (target.isNotEmpty()) {
+                return AIResponse(
+                    spokenText = "Clicking $target, Sir.",
+                    actionCommand = ActionCommand(
+                        type = ActionCommand.TYPE_CLICK_ELEMENT,
+                        target = target,
+                        spokenResponse = "Clicking $target, Sir."
+                    )
+                )
+            }
+        }
+
+        // Screen Writing ("type [text]", "write [text]", "[text] likho")
+        val writePrefixes = listOf("type ", "write ", "enter text ", "likho ")
+        for (prefix in writePrefixes) {
+            if (clean.startsWith(prefix)) {
+                val text = clean.removePrefix(prefix).trim()
+                if (text.isNotEmpty()) {
+                    return AIResponse(
+                        spokenText = "Entering text into active field, Sir.",
+                        actionCommand = ActionCommand(
+                            type = ActionCommand.TYPE_WRITE_TEXT,
+                            target = text,
+                            spokenResponse = "Entering text into active field, Sir."
+                        )
+                    )
+                }
+            }
+        }
+
+        // Global Navigation (Back, Home, Recents, Notifications)
+        if (clean == "go back" || clean == "back" || clean == "back jao" || clean == "back karo" || clean == "piche jao") {
+            return AIResponse(
+                spokenText = "Navigating back, Sir.",
+                actionCommand = ActionCommand(
+                    type = ActionCommand.TYPE_GLOBAL_ACTION,
+                    target = "back",
+                    spokenResponse = "Navigating back, Sir."
+                )
+            )
+        }
+        if (clean == "go home" || clean == "home" || clean == "home screen" || clean == "home jao" || clean == "home karo") {
+            return AIResponse(
+                spokenText = "Returning to Home screen, Sir.",
+                actionCommand = ActionCommand(
+                    type = ActionCommand.TYPE_GLOBAL_ACTION,
+                    target = "home",
+                    spokenResponse = "Returning to Home screen, Sir."
+                )
+            )
+        }
+        if (clean.contains("notification") || clean.contains("notifications kholo")) {
+            return AIResponse(
+                spokenText = "Opening notifications panel, Sir.",
+                actionCommand = ActionCommand(
+                    type = ActionCommand.TYPE_GLOBAL_ACTION,
+                    target = "notifications",
+                    spokenResponse = "Opening notifications panel, Sir."
+                )
+            )
+        }
+        if (clean.contains("recent apps") || clean.contains("recents") || clean.contains("app switcher")) {
+            return AIResponse(
+                spokenText = "Opening recent applications, Sir.",
+                actionCommand = ActionCommand(
+                    type = ActionCommand.TYPE_GLOBAL_ACTION,
+                    target = "recents",
+                    spokenResponse = "Opening recent applications, Sir."
+                )
+            )
+        }
+
+        // Device Telemetry & Battery
         if (clean.contains("battery") || clean.contains("charging") || clean.contains("telemetry") ||
             clean.contains("device status") || clean.contains("system status") ||
             clean.contains("kitni charging") || clean.contains("battery kitni")
@@ -40,7 +233,7 @@ class LocalRuleAIProvider : AIProvider {
             )
         }
 
-        // 3. Time / Date
+        // Time / Date
         if (clean.contains("what time") || clean.contains("time kya") || clean.contains("current time") ||
             clean.contains("aaj ki date") || clean.contains("what is today's date") || clean.contains("kitne baje")
         ) {
@@ -53,8 +246,7 @@ class LocalRuleAIProvider : AIProvider {
             )
         }
 
-        // 4. App Launching (English + Hindi + Hinglish)
-        // "open youtube", "youtube kholo", "open chrome", "calculator open karo", "camera start karo"
+        // App Launching (English + Hindi + Hinglish)
         val openPrefixes = listOf("open ", "launch ", "start ")
         val openSuffixes = listOf(" kholo", " chalao", " open karo", " start karo", " kholein")
 
@@ -90,199 +282,110 @@ class LocalRuleAIProvider : AIProvider {
             }
         }
 
-        // 5. Timers
-        // "set timer for 5 minutes", "timer 30 seconds", "5 minute ka timer lagao"
+        // Timers
         if (clean.contains("timer")) {
             val seconds = extractSeconds(clean)
             return AIResponse(
                 spokenText = "Setting a timer for $seconds seconds, Sir.",
                 actionCommand = ActionCommand(
                     type = ActionCommand.TYPE_SET_TIMER,
-                    parameters = mapOf("seconds" to seconds.toString()),
-                    spokenResponse = "Timer set for $seconds seconds, Sir."
+                    parameters = mapOf("seconds" to seconds.toString(), "label" to "Stark Timer"),
+                    spokenResponse = "Setting a timer for $seconds seconds, Sir."
                 )
             )
         }
 
-        // 6. Alarms
-        // "set alarm for 7 am", "subah 6 baje ka alarm"
+        // Alarms
         if (clean.contains("alarm")) {
-            val time = extractHourMinute(clean)
+            val hour = extractHour(clean)
+            val min = extractMinute(clean)
             return AIResponse(
-                spokenText = "Configuring alarm, Sir.",
+                spokenText = "Setting alarm for $hour:${if (min < 10) "0$min" else "$min"}, Sir.",
                 actionCommand = ActionCommand(
                     type = ActionCommand.TYPE_SET_ALARM,
-                    parameters = mapOf(
-                        "hour" to time.first.toString(),
-                        "minutes" to time.second.toString()
-                    ),
-                    spokenResponse = "Alarm scheduled, Sir."
+                    parameters = mapOf("hour" to hour.toString(), "minutes" to min.toString(), "label" to "Stark Alarm"),
+                    spokenResponse = "Setting alarm for $hour:$min, Sir."
                 )
             )
         }
 
-        // 7. Memory: Remember
-        // "remember that...", "yaad rakhna ki..."
-        if (clean.startsWith("remember that ") || clean.startsWith("remember ") ||
-            clean.startsWith("yaad rakhna ki ") || clean.startsWith("yaad rakho ")
-        ) {
-            val fact = clean
-                .removePrefix("remember that ")
-                .removePrefix("remember ")
-                .removePrefix("yaad rakhna ki ")
-                .removePrefix("yaad rakho ")
-                .trim()
-            return AIResponse(
-                spokenText = "I have recorded that in local memory, Sir.",
-                actionCommand = ActionCommand(
-                    type = ActionCommand.TYPE_REMEMBER,
-                    target = fact,
-                    spokenResponse = "I have safely stored that in memory, Sir."
-                )
-            )
-        }
-
-        // 8. Memory: Recall
-        // "what do you remember about me?", "mere baare me kya yaad hai?"
-        if (clean.contains("what do you remember") || clean.contains("kya yaad hai") ||
-            clean.contains("list memories") || clean.contains("kya pata hai")
-        ) {
-            val summary = if (memories.isEmpty()) {
-                "My memory banks are currently clear, Sir."
-            } else {
-                "Here is what I have saved: " + memories.take(5).joinToString(". ") { it.value }
+        // Memory Save
+        val rememberPrefixes = listOf("remember that ", "remember ", "yaad rakhna ki ", "yaad rakho ")
+        for (prefix in rememberPrefixes) {
+            if (clean.startsWith(prefix)) {
+                val fact = clean.removePrefix(prefix).trim()
+                if (fact.isNotEmpty()) {
+                    return AIResponse(
+                        spokenText = "Stored securely in my memory core, Sir.",
+                        actionCommand = ActionCommand(
+                            type = ActionCommand.TYPE_REMEMBER,
+                            target = fact,
+                            parameters = mapOf("category" to "user_noted"),
+                            spokenResponse = "Stored securely in memory, Sir."
+                        )
+                    )
+                }
             }
-            return AIResponse(
-                spokenText = summary,
-                actionCommand = ActionCommand(
-                    type = ActionCommand.TYPE_NORMAL_RESPONSE,
-                    spokenResponse = summary
-                )
-            )
         }
 
-        // 9. Memory: Forget
-        if (clean.startsWith("forget that ") || clean.startsWith("forget ") || clean.startsWith("bhool jao ")) {
-            val target = clean.removePrefix("forget that ").removePrefix("forget ").removePrefix("bhool jao ").trim()
-            return AIResponse(
-                spokenText = "Removing matching records from memory, Sir.",
-                actionCommand = ActionCommand(
-                    type = ActionCommand.TYPE_FORGET,
-                    target = target,
-                    spokenResponse = "Erased from memory banks, Sir."
-                )
-            )
-        }
-
-        // 10. Web search
-        if (clean.startsWith("search for ") || clean.startsWith("google ") ||
-            clean.startsWith("search ") || clean.contains("dhoondo") || clean.contains("search karo")
-        ) {
-            val query = clean
-                .removePrefix("search for ")
-                .removePrefix("google ")
-                .removePrefix("search ")
-                .replace("dhoondo", "")
-                .replace("search karo", "")
-                .trim()
-            return AIResponse(
-                spokenText = "Searching for $query, Sir.",
-                actionCommand = ActionCommand(
-                    type = ActionCommand.TYPE_WEB_SEARCH,
-                    query = query,
-                    spokenResponse = "Searching online for $query, Sir."
-                )
-            )
-        }
-
-        // 11. Settings
-        if (clean.contains("open settings") || clean.contains("settings kholo")) {
-            val sub = when {
-                clean.contains("wifi") || clean.contains("wi-fi") -> "wifi"
-                clean.contains("bluetooth") -> "bluetooth"
-                clean.contains("sound") || clean.contains("volume") -> "sound"
-                clean.contains("display") || clean.contains("brightness") -> "display"
-                else -> null
+        // Web Search
+        val searchPrefixes = listOf("search for ", "search ", "google ", "find ", "dhoondo ")
+        for (prefix in searchPrefixes) {
+            if (clean.startsWith(prefix)) {
+                val query = clean.removePrefix(prefix).trim()
+                if (query.isNotEmpty()) {
+                    return AIResponse(
+                        spokenText = "Initiating search protocol for $query, Sir.",
+                        actionCommand = ActionCommand(
+                            type = ActionCommand.TYPE_WEB_SEARCH,
+                            query = query,
+                            spokenResponse = "Searching the web for $query, Sir."
+                        )
+                    )
+                }
             }
-            return AIResponse(
-                spokenText = "Opening settings, Sir.",
-                actionCommand = ActionCommand(
-                    type = ActionCommand.TYPE_OPEN_SETTINGS,
-                    target = sub,
-                    spokenResponse = "Opening settings, Sir."
-                )
-            )
         }
 
-        // 12. Conversational greetings
-        if (clean.contains("hello") || clean.contains("hi") || clean.contains("namaste") || clean.contains("hey")) {
+        // Greetings
+        if (clean == "hello" || clean == "hi" || clean == "hey" || clean == "kaise ho" || clean == "who are you") {
             return AIResponse(
-                spokenText = "At your service, Sir. How may I assist you today?",
+                spokenText = "Hello Sir. All Stark protocols are fully operational. I am standing by to control your device or answer your queries.",
                 actionCommand = ActionCommand(
                     type = ActionCommand.TYPE_NORMAL_RESPONSE,
-                    spokenResponse = "At your service, Sir. How may I assist you today?"
+                    spokenResponse = "Hello Sir. All Stark protocols are fully operational."
                 )
             )
         }
 
-        if (clean.contains("who are you") || clean.contains("kaun ho") || clean.contains("your name")) {
-            val desc = "I am Mr. Stark, your personal cinematic AI assistant. All local systems, app launching, timers, and offline routines are fully operational."
-            return AIResponse(
-                spokenText = desc,
-                actionCommand = ActionCommand(
-                    type = ActionCommand.TYPE_NORMAL_RESPONSE,
-                    spokenResponse = desc
-                )
-            )
-        }
-
-        if (clean.contains("how are you") || clean.contains("kaise ho")) {
-            return AIResponse(
-                spokenText = "Operating at peak computational capacity, Sir. Standing by for your instructions.",
-                actionCommand = ActionCommand(
-                    type = ActionCommand.TYPE_NORMAL_RESPONSE,
-                    spokenResponse = "Operating at peak computational capacity, Sir. Standing by for your instructions."
-                )
-            )
-        }
-
-        // Fallback
-        val fallback = "I understood: \"$trimmed\". In offline rule mode, I can open apps, set timers, control alarms, check battery telemetry, and manage memories. For open-ended queries, please enable Gemini AI in Settings."
+        // Default query search fallback
         return AIResponse(
-            spokenText = fallback,
+            spokenText = "Processing request, Sir.",
             actionCommand = ActionCommand(
-                type = ActionCommand.TYPE_NORMAL_RESPONSE,
-                spokenResponse = fallback
-            ),
-            isOffline = true
+                type = ActionCommand.TYPE_WEB_SEARCH,
+                query = clean,
+                spokenResponse = "Searching for $clean, Sir."
+            )
         )
     }
 
     private fun extractSeconds(text: String): Int {
-        val words = text.split(" ")
-        for (i in words.indices) {
-            val num = words[i].toIntOrNull()
-            if (num != null) {
-                val unit = words.getOrNull(i + 1) ?: ""
-                return when {
-                    unit.startsWith("min") -> num * 60
-                    unit.startsWith("sec") -> num
-                    unit.startsWith("hour") || unit.startsWith("ghante") -> num * 3600
-                    else -> num * 60
-                }
-            }
+        val numbers = Regex("\\d+").findAll(text).map { it.value.toInt() }.toList()
+        val num = numbers.firstOrNull() ?: 60
+        return when {
+            text.contains("minute") || text.contains("min") -> num * 60
+            text.contains("hour") || text.contains("ghante") -> num * 3600
+            else -> num
         }
-        return 60
     }
 
-    private fun extractHourMinute(text: String): Pair<Int, Int> {
-        val digits = Regex("\\d+").findAll(text).map { it.value.toInt() }.toList()
-        return if (digits.isNotEmpty()) {
-            val hour = digits[0].coerceIn(0, 23)
-            val minute = if (digits.size > 1) digits[1].coerceIn(0, 59) else 0
-            Pair(hour, minute)
-        } else {
-            Pair(7, 0)
-        }
+    private fun extractHour(text: String): Int {
+        val numbers = Regex("\\d+").findAll(text).map { it.value.toInt() }.toList()
+        val h = numbers.firstOrNull() ?: 7
+        return if (text.contains("pm") && h < 12) h + 12 else h
+    }
+
+    private fun extractMinute(text: String): Int {
+        val numbers = Regex("\\d+").findAll(text).map { it.value.toInt() }.toList()
+        return if (numbers.size > 1) numbers[1] else 0
     }
 }
