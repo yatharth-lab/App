@@ -8,11 +8,17 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.util.Locale
 
 class SpeechToTextEngine(private val context: Context) {
+
+    companion object {
+        private const val TAG = "StarkSTTEngine"
+        private const val RESTART_DELAY_MS = 250L
+        private const val ERROR_BACKOFF_DELAY_MS = 500L
+    }
 
     interface Listener {
         fun onListeningStarted()
@@ -33,6 +39,7 @@ class SpeechToTextEngine(private val context: Context) {
     var isContinuousMode: Boolean = false
     private var activeLanguageCode: String = "en-IN"
     private var isDestroyed: Boolean = false
+    private var isStarting: Boolean = false
 
     fun setListener(listener: Listener?) {
         this.listener = listener
@@ -43,29 +50,42 @@ class SpeechToTextEngine(private val context: Context) {
     }
 
     fun startListening(languageCode: String = "en-IN", continuous: Boolean = false) {
+        Log.d(TAG, "startListening called with continuous=$continuous, lang=$languageCode")
         isDestroyed = false
         this.activeLanguageCode = languageCode
         this.isContinuousMode = continuous
 
+        mainHandler.removeCallbacksAndMessages(null)
         mainHandler.post {
             executeStartListening()
         }
     }
 
     private fun executeStartListening() {
-        if (isDestroyed) return
+        if (isDestroyed) {
+            Log.d(TAG, "executeStartListening aborted: engine is destroyed")
+            return
+        }
 
         if (!isRecognitionAvailable()) {
+            Log.e(TAG, "Speech recognition unavailable on device")
             listener?.onError("Speech recognition is not available on this device.")
             return
         }
 
+        if (isStarting) {
+            Log.d(TAG, "Already starting recognizer, skipping redundant call")
+            return
+        }
+
+        isStarting = true
         stopRecognizerInstance()
 
         try {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
+                        isStarting = false
                         _isListening.value = true
                         listener?.onListeningStarted()
                     }
@@ -83,6 +103,7 @@ class SpeechToTextEngine(private val context: Context) {
                     }
 
                     override fun onError(error: Int) {
+                        isStarting = false
                         _isListening.value = false
                         val message = when (error) {
                             SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
@@ -97,18 +118,23 @@ class SpeechToTextEngine(private val context: Context) {
                             else -> "Recognition error ($error)"
                         }
 
-                        val isTransient = error == SpeechRecognizer.ERROR_NO_MATCH ||
-                                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
-                                error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
-                                error == SpeechRecognizer.ERROR_CLIENT
+                        Log.d(TAG, "SpeechRecognizer onError: $error ($message). continuous=$isContinuousMode")
 
-                        if (isContinuousMode && !isDestroyed && isTransient) {
-                            // Automatically restart listening for hands-free / wake word detection
-                            mainHandler.postDelayed({
-                                if (isContinuousMode && !isDestroyed) {
-                                    executeStartListening()
-                                }
-                            }, 250)
+                        // Fatal errors that require user intervention
+                        if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                            listener?.onError(message)
+                            listener?.onListeningEnded()
+                            return
+                        }
+
+                        // In continuous mode, safely restart with slight backoff
+                        if (isContinuousMode && !isDestroyed) {
+                            val delay = if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) {
+                                ERROR_BACKOFF_DELAY_MS
+                            } else {
+                                RESTART_DELAY_MS
+                            }
+                            scheduleRestart(delay)
                         } else {
                             listener?.onError(message)
                             listener?.onListeningEnded()
@@ -116,24 +142,24 @@ class SpeechToTextEngine(private val context: Context) {
                     }
 
                     override fun onResults(results: Bundle?) {
+                        isStarting = false
                         _isListening.value = false
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val text = matches?.firstOrNull() ?: ""
 
+                        Log.d(TAG, "SpeechRecognizer onResults: '$text'. continuous=$isContinuousMode")
+
                         if (text.isNotBlank()) {
                             listener?.onResult(text)
                         } else {
-                            if (isContinuousMode && !isDestroyed) {
-                                mainHandler.postDelayed({
-                                    if (isContinuousMode && !isDestroyed) {
-                                        executeStartListening()
-                                    }
-                                }, 200)
-                            } else {
-                                listener?.onResult("")
-                            }
+                            listener?.onResult("")
                         }
                         listener?.onListeningEnded()
+
+                        // CRITICAL FIX: In continuous mode, MUST restart listening immediately after delivering results!
+                        if (isContinuousMode && !isDestroyed) {
+                            scheduleRestart(RESTART_DELAY_MS)
+                        }
                     }
 
                     override fun onPartialResults(partialResults: Bundle?) {
@@ -158,22 +184,42 @@ class SpeechToTextEngine(private val context: Context) {
 
             speechRecognizer?.startListening(intent)
         } catch (e: Exception) {
+            isStarting = false
             _isListening.value = false
-            listener?.onError("Failed to start speech recognizer: ${e.message}")
+            Log.e(TAG, "Exception starting speechRecognizer", e)
+            if (isContinuousMode && !isDestroyed) {
+                scheduleRestart(ERROR_BACKOFF_DELAY_MS)
+            } else {
+                listener?.onError("Failed to start speech recognizer: ${e.message}")
+            }
         }
+    }
+
+    private fun scheduleRestart(delayMs: Long) {
+        mainHandler.removeCallbacksAndMessages(null)
+        mainHandler.postDelayed({
+            if (isContinuousMode && !isDestroyed) {
+                executeStartListening()
+            }
+        }, delayMs)
     }
 
     private fun stopRecognizerInstance() {
         try {
             speechRecognizer?.stopListening()
+            speechRecognizer?.cancel()
             speechRecognizer?.destroy()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w(TAG, "Error stopping recognizer instance: ${e.message}")
+        }
         speechRecognizer = null
     }
 
     fun stopListening() {
+        Log.d(TAG, "stopListening called")
         isContinuousMode = false
         isDestroyed = true
+        isStarting = false
         mainHandler.removeCallbacksAndMessages(null)
         mainHandler.post {
             stopRecognizerInstance()

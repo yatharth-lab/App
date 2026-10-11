@@ -4,12 +4,22 @@ import java.util.Locale
 
 class WakeWordDetector {
 
+    // Extended phonetics and common variations/mishearings of "Mr. Stark" by speech engines
     private val activationPhrases = listOf(
         "mr stark",
         "mr. stark",
         "mister stark",
         "hey stark",
-        "stark"
+        "ok stark",
+        "okay stark",
+        "stark",
+        "mr start",
+        "mr spark",
+        "mr dark",
+        "mr stalk",
+        "mister stock",
+        "starck",
+        "starke"
     )
 
     data class DetectionResult(
@@ -26,12 +36,20 @@ class WakeWordDetector {
 
         for (phrase in activationPhrases) {
             if (lower.startsWith(phrase)) {
-                val remainder = lower.removePrefix(phrase).trim().removePrefix(",").trim()
+                val remainder = lower.removePrefix(phrase)
+                    .trim()
+                    .removePrefix(",")
+                    .removePrefix(".")
+                    .trim()
                 return DetectionResult(isWakeWordDetected = true, extractedCommand = remainder)
             }
             if (lower.contains(phrase)) {
                 val index = lower.indexOf(phrase)
-                val remainder = lower.substring(index + phrase.length).trim().removePrefix(",").trim()
+                val remainder = lower.substring(index + phrase.length)
+                    .trim()
+                    .removePrefix(",")
+                    .removePrefix(".")
+                    .trim()
                 return DetectionResult(isWakeWordDetected = true, extractedCommand = remainder)
             }
         }
