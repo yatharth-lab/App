@@ -1,4 +1,4 @@
-name: Build Debug APK
+name: Android CI
 
 on:
   push:
@@ -22,8 +22,8 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses 2>/dev/null || true
 
       - name: Restore Debug Keystore
         run: |
